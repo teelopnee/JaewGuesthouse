@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Small entrance animations used by the modals (animate-in / fade-in / zoom-in-95 / slide-in-*) */
+@keyframes jaew-enter {
+  from {
+    opacity: var(--jaew-enter-opacity, 1);
+    transform: translate3d(0, var(--jaew-enter-y, 0), 0) scale(var(--jaew-enter-scale, 1));
+  }
+}
+.animate-in {
+  animation: jaew-enter 0.2s ease-out both;
+}
+.fade-in {
+  --jaew-enter-opacity: 0;
+}
+.zoom-in-95 {
+  --jaew-enter-scale: 0.95;
+}
+.slide-in-from-bottom-8 {
+  --jaew-enter-y: 2rem;
+}
+.slide-in-from-bottom-5,
+.slide-in-from-bottom-3 {
+  --jaew-enter-y: 0.75rem;
+}
+.slide-in-from-top-3 {
+  --jaew-enter-y: -0.75rem;
+}
+@keyframes jaew-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.animate-shake {
+  animation: jaew-shake 0.25s ease-in-out 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-shake {
+    animation: none;
+  }
+}

@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-server
+data
+*.log
+*.tmp
+.env*
+!.env.example
+.git
+qr-code

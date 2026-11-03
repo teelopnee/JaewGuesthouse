@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-server/
+data/
+coverage/
+.DS_Store
+*.log
+*.tmp
+.env*
+!.env.example
+
+# Never upload: full project zip (includes data + node_modules) and the old Firestore import script (has an API key)
+*.zip
+scripts/import-firestore.mjs
