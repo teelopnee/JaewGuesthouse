@@ -65,6 +65,12 @@ type Ctx = Context<AppEnv>;
 const app = new Hono<AppEnv>();
 
 app.use('*', async (c, next) => {
+  // workers.dev also answers plain http: send visitors to https so the admin PIN is always encrypted
+  const url = new URL(c.req.url);
+  if (url.protocol === 'http:' && url.hostname.endsWith('.workers.dev')) {
+    url.protocol = 'https:';
+    return c.redirect(url.toString(), 301);
+  }
   await next();
   c.res.headers.set('X-Content-Type-Options', 'nosniff');
   c.res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
