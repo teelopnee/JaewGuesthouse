@@ -7,6 +7,12 @@
 
 - ลิงก์ลูกค้า: https://jaew-guesthouse.teelopnee.workers.dev
 - QR และโปสเตอร์ A5 สำหรับพิมพ์: โฟลเดอร์ `qr-code/` (`jaew-qr-poster-A5.pdf`)
+
+**ลิงก์และ QR นี้ใช้ได้ตลอด ตราบใดที่:**
+1. ไม่เปลี่ยนชื่อ Worker `jaew-guesthouse` (ใน `wrangler.jsonc`) และไม่ปิด `workers_dev`
+   (`npm test` จะเตือนทันทีถ้ามีใครเปลี่ยน)
+2. ไม่เปลี่ยนชื่อ subdomain `teelopnee` ในหน้า Cloudflare → Workers & Pages → Settings
+3. ไม่ลบ Worker หรือบัญชี Cloudflare (แนะนำให้เปิดยืนยันตัวตน 2 ชั้นของบัญชีไว้)
 - ใช้ Cloudflare **Workers** (ตัวเว็บ + API) และ **D1** (ฐานข้อมูล) บนบัญชี teelopnee@gmail.com
 - ข้อมูลทั้งหมดอยู่ในฐานข้อมูล D1 ชื่อ `jaew-guesthouse` ได้แก่ การตั้งค่าห้อง ราคา รูปที่อัปโหลด สมุดจด
   การจอง และสำรองรายวัน การอัปเดตโค้ดหรือ deploy ใหม่ **ไม่ทำให้ข้อมูลหาย**
@@ -44,7 +50,7 @@ npm run dev
 ## ระบบกันข้อมูลหาย
 
 - ทุกการบันทึกเขียนลงฐานข้อมูลทันที ถ้าบันทึกพร้อมกันจากหลายเครื่อง ระบบจะรวมให้ ไม่ทับกัน
-- **สำรองอัตโนมัติทุกคืน** ตี 3 (เวลาไทย) เก็บย้อนหลัง 30 วัน
+- **สำรองอัตโนมัติทุกวัน** (ระบบเช็กทุกชั่วโมง) เก็บย้อนหลัง 30 วัน
 - D1 ย้อนเวลาข้อมูลกลับไปได้ 7 วัน (Time Travel): `npx wrangler d1 time-travel info jaew-guesthouse`
 - กด "ดาวน์โหลดไฟล์สำรอง" ในหน้า ตั้งค่าที่พัก เพื่อเก็บสำเนาไว้ในเครื่องตัวเองอีกชั้น
 - สำรองทั้งฐานข้อมูล (รวมรูป) ลงเครื่อง: `npx wrangler d1 export jaew-guesthouse --remote --output=jaew-backup.sql`
@@ -71,8 +77,8 @@ npm run import:railway -- --url https://jaew-guesthouse.teelopnee.workers.dev --
 npm run compare -- https://jaew-guesthouse-production.up.railway.app https://jaew-guesthouse.teelopnee.workers.dev
 ```
 
-(คำสั่งแรกต้องตั้ง `IMPORT_TOKEN` ให้ตรงกับ secret บน Cloudflare และใช้ได้เฉพาะช่วงที่ secret นี้ยังอยู่
-ย้ายเสร็จแล้วให้ลบด้วย `npx wrangler secret delete IMPORT_TOKEN`)
+(คำสั่งแรกใช้ได้เฉพาะตอนที่มี secret `IMPORT_TOKEN` บน Cloudflare และต้องตั้ง `IMPORT_TOKEN` ให้ตรงกัน
+ย้ายเสร็จแล้ว secret นี้ถูกลบไปแล้ว (4 พ.ย. 2026) ช่องทางนำเข้าข้อมูลจึงปิดอยู่)
 โค้ดเวอร์ชัน Railway (Express + Docker) ยังอยู่ใน GitHub ที่ commit แรก
 
 ## โครงสร้าง

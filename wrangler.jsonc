@@ -1,6 +1,8 @@
 // Cloudflare Workers settings (free plan). See README.md "ขึ้นเว็บจริง".
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // DO NOT RENAME and keep "workers_dev": true - the name is part of the website link
+  // https://jaew-guesthouse.teelopnee.workers.dev that the printed QR codes point to.
   "name": "jaew-guesthouse",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-15",
@@ -28,7 +30,7 @@
     // Bookings are also pulled from the Jaew Logbook app. Set to "" to turn it off.
     "LOGBOOK_URL": "https://jaewlogbook.ai.studio/api/bookings"
   },
-  // 20:00 UTC = 03:00 Thai time: daily backup + clean-up
-  "triggers": { "crons": ["0 20 * * *"] },
+  // Every hour: make today's backup if it doesn't exist yet + clean-up (like the Railway version did)
+  "triggers": { "crons": ["0 * * * *"] },
   "observability": { "enabled": true }
 }

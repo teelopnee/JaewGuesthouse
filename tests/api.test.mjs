@@ -121,6 +121,23 @@ const PNG = Buffer.from(
 const pngName = `${crypto.createHash('sha256').update(PNG).digest('hex').slice(0, 24)}.png`;
 
 // ---------------------------------------------------------------------------
+// The printed QR codes point to this link: it must never change by accident
+// ---------------------------------------------------------------------------
+
+const SITE_URL = 'https://jaew-guesthouse.teelopnee.workers.dev';
+
+test('website link used by the QR code stays the same', () => {
+  // wrangler.jsonc allows // comments on their own lines
+  const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf-8').replace(/^\s*\/\/.*$/gm, ''));
+  assert.equal(config.name, 'jaew-guesthouse', 'renaming the Worker changes the link on every printed QR code');
+  assert.equal(config.workers_dev, true, 'turning off workers.dev takes the QR link offline');
+  assert.ok(config.triggers.crons.includes('0 * * * *'), 'hourly backup job');
+  const poster = fs.readFileSync('qr-code/qr-poster.html', 'utf-8');
+  assert.ok(poster.includes(`<div class="url">${SITE_URL.replace('https://', '')}</div>`));
+  assert.ok(fs.readFileSync('scripts/make-qr.mjs', 'utf-8').includes(`'${SITE_URL}/'`));
+});
+
+// ---------------------------------------------------------------------------
 // Public pages
 // ---------------------------------------------------------------------------
 
@@ -397,8 +414,8 @@ test('reset all settings', async () => {
   assert.deepEqual(r.data.config.guesthouseConfig, {});
 });
 
-test('nightly job makes today\'s backup', async () => {
-  const res = await fetch(`${BASE}/__scheduled?cron=${encodeURIComponent('0 20 * * *')}`);
+test('hourly job makes today\'s backup', async () => {
+  const res = await fetch(`${BASE}/__scheduled?cron=${encodeURIComponent('0 * * * *')}`);
   assert.equal(res.status, 200);
   const today = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
   let status;

@@ -4,7 +4,7 @@
  *    index.html is filled in here (seo.ts)
  *  - Public API: GET /api/state (rooms config, photos, availability)
  *  - Admin API (PIN login + Bearer token): settings, room edits, photos, booking ledger
- *  - Every night (cron, 03:00 Thai time): daily backup + clean-up
+ *  - Every hour (cron): today's backup if it doesn't exist yet + clean-up
  */
 
 import { Hono, type Context } from 'hono';
@@ -643,10 +643,10 @@ app.onError((err, c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Nightly jobs
+// Hourly jobs
 // ---------------------------------------------------------------------------
 
-async function nightly(env: Env) {
+async function hourly(env: Env) {
   for (const [name, job] of [
     ['daily backup', runDailyBackup],
     ['photo clean-up', cleanupUnusedUploads],
@@ -663,6 +663,6 @@ async function nightly(env: Env) {
 export default {
   fetch: app.fetch,
   scheduled(_controller, env, ctx) {
-    ctx.waitUntil(nightly(env));
+    ctx.waitUntil(hourly(env));
   },
 } satisfies ExportedHandler<Env>;
