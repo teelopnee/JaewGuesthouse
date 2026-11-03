@@ -2,29 +2,58 @@
  * bookings.ts
  * Booking records = bookings saved by the admin here + bookings pulled from the
  * external Jaew Logbook app (if reachable). Local edits always win.
+ * The pulled copy is kept in D1 and refreshed at most every 15 seconds while people use the site.
  */
 
-import { BookingRecord, getBookingsData, bumpRevision } from './store';
+import { Env } from './http';
+import { BookingRecord, BookingsData } from './store';
 
-const LOGBOOK_URL =
-  process.env.LOGBOOK_URL !== undefined ? process.env.LOGBOOK_URL : 'https://jaewlogbook.ai.studio/api/bookings';
+const DEFAULT_LOGBOOK_URL = 'https://jaewlogbook.ai.studio/api/bookings';
 const SYNC_INTERVAL_MS = 15_000;
+/** A copy older than this is refreshed before answering, so customers never see old availability. */
+export const MAX_STALE_MS = 2 * 60_000;
 
-let remoteBookings: BookingRecord[] = [];
-let lastSyncAt = 0;
-let lastSyncOk = false;
-let remoteSignature = '';
+export interface LogbookCache {
+  bookings: BookingRecord[];
+  ok: boolean;
+  /** Last time a refresh was started (ms). */
+  lastAttemptAt: number;
+  /** Last time a refresh succeeded and was saved (ms). */
+  lastSyncAt: number;
+  /** Last time the bookings or the ok status changed (ms) - part of the page revision. */
+  changedAt: number;
+}
 
-export async function syncFromLogbook(): Promise<void> {
-  if (!LOGBOOK_URL) return;
+function isPlainObject(v: unknown): v is Record<string, any> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+const num0 = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+export function normaliseLogbook(raw: unknown): LogbookCache {
+  const r = isPlainObject(raw) ? raw : {};
+  return {
+    bookings: Array.isArray(r.bookings) ? r.bookings : [],
+    ok: r.ok === true,
+    lastAttemptAt: num0(r.lastAttemptAt),
+    lastSyncAt: num0(r.lastSyncAt),
+    changedAt: num0(r.changedAt),
+  };
+}
+
+export function logbookUrl(env: Env): string {
+  return env.LOGBOOK_URL !== undefined ? env.LOGBOOK_URL : DEFAULT_LOGBOOK_URL;
+}
+
+async function fetchLogbook(url: string): Promise<BookingRecord[]> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 6000);
   try {
-    const res = await fetch(LOGBOOK_URL, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!Array.isArray(data)) throw new Error('Logbook did not return a list');
-    const clean = data
+    return data
       .filter(
         (b: any) =>
           b &&
@@ -35,56 +64,78 @@ export async function syncFromLogbook(): Promise<void> {
           isIsoDate(b.checkout_date)
       )
       .map((b: any) => ({ ...b, booking_id: String(b.booking_id), room_id: String(b.room_id) }));
-    const signature = JSON.stringify(clean);
-    if (signature !== remoteSignature) {
-      remoteSignature = signature;
-      remoteBookings = clean;
-      bumpRevision();
-    }
-    lastSyncAt = Date.now();
-    if (!lastSyncOk) bumpRevision();
-    lastSyncOk = true;
-  } catch {
-    // Keep the last good copy; the logbook is optional.
-    if (lastSyncOk) bumpRevision();
-    lastSyncOk = false;
   } finally {
     clearTimeout(timer);
   }
 }
 
-export function startLogbookSync() {
-  if (!LOGBOOK_URL) {
-    console.log('[bookings] External logbook sync disabled');
-    return;
+/**
+ * Refreshes the logbook copy if it is older than 15 seconds and returns the new copy, or null
+ * when there was nothing to do. Only one request refreshes at a time: it first claims the refresh
+ * by moving lastAttemptAt forward, and only saves its result while it still holds that claim.
+ */
+export async function syncFromLogbook(env: Env, cache: LogbookCache): Promise<LogbookCache | null> {
+  const url = logbookUrl(env);
+  const now = Date.now();
+  if (!url || now - cache.lastAttemptAt < SYNC_INTERVAL_MS) return null;
+
+  const db = env.DB;
+  const stamp = new Date(now).toISOString();
+  const claimed: LogbookCache = { ...cache, lastAttemptAt: now };
+  const claim = await db
+    .prepare(
+      `INSERT INTO docs (key, value, updated_at) VALUES ('logbook', ?1, ?2)
+       ON CONFLICT (key) DO UPDATE SET value = ?1, updated_at = ?2
+       WHERE COALESCE(json_extract(docs.value, '$.lastAttemptAt'), 0) = ?3`
+    )
+    .bind(JSON.stringify(claimed), stamp, cache.lastAttemptAt)
+    .run();
+  if (claim.meta.changes !== 1) return null; // another request is already refreshing
+
+  let next: LogbookCache | null = null;
+  try {
+    const bookings = await fetchLogbook(url);
+    if (!cache.ok || JSON.stringify(bookings) !== JSON.stringify(cache.bookings)) {
+      next = { bookings, ok: true, lastAttemptAt: now, lastSyncAt: now, changedAt: now };
+    }
+  } catch {
+    // Keep the last good copy; the logbook is optional.
+    if (cache.ok) next = { ...cache, ok: false, lastAttemptAt: now, lastSyncAt: cache.lastAttemptAt, changedAt: now };
   }
-  syncFromLogbook();
-  setInterval(syncFromLogbook, SYNC_INTERVAL_MS).unref();
+  if (!next) return claimed;
+  await db
+    .prepare(
+      `UPDATE docs SET value = ?, updated_at = ? WHERE key = 'logbook' AND json_extract(value, '$.lastAttemptAt') = ?`
+    )
+    .bind(JSON.stringify(next), new Date().toISOString(), now)
+    .run();
+  return next;
 }
 
-export function getSyncStatus() {
+export function getSyncStatus(env: Env, cache: LogbookCache) {
+  const last = cache.ok ? cache.lastAttemptAt : cache.lastSyncAt;
   return {
-    enabled: Boolean(LOGBOOK_URL),
-    ok: lastSyncOk,
-    lastSyncTime: lastSyncAt ? new Date(lastSyncAt).toISOString() : null,
-    bookingCount: remoteBookings.length,
+    enabled: Boolean(logbookUrl(env)),
+    ok: cache.ok,
+    lastSyncTime: last ? new Date(last).toISOString() : null,
+    bookingCount: cache.bookings.length,
   };
 }
 
-export function getRemoteBooking(id: string): BookingRecord | undefined {
-  return remoteBookings.find((b) => b.booking_id === id);
+export function getRemoteBooking(cache: LogbookCache, id: string): BookingRecord | undefined {
+  return cache.bookings.find((b) => b.booking_id === id);
 }
 
-export function getRemoteBookingIds(): string[] {
-  return remoteBookings.map((b) => b.booking_id);
+export function getRemoteBookingIds(cache: LogbookCache): string[] {
+  return cache.bookings.map((b) => b.booking_id);
 }
 
 /** Local bookings first, then logbook bookings that were not edited or deleted here. */
-export function getMergedBookings(): BookingRecord[] {
-  const { bookings, deletedIds } = getBookingsData();
+export function getMergedBookings(data: BookingsData, cache: LogbookCache): BookingRecord[] {
+  const { bookings, deletedIds } = data;
   const localIds = new Set(bookings.map((b) => b.booking_id));
   const deleted = new Set(deletedIds);
-  const remote = remoteBookings.filter((b) => !localIds.has(b.booking_id) && !deleted.has(b.booking_id));
+  const remote = cache.bookings.filter((b) => !localIds.has(b.booking_id) && !deleted.has(b.booking_id));
   return [...bookings, ...remote];
 }
 

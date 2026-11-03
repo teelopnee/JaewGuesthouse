@@ -22,8 +22,12 @@ import { GUESTHOUSE_CONFIG } from '../data/config';
 import { apiRequest, ApiError, getAdminToken, setAdminToken } from '../services/api';
 import { useToast } from './ToastContext';
 
-const POLL_MS = 10_000;
+// Customers check for new availability every 30 s, the admin every 10 s
+// (Cloudflare's free plan allows 100,000 requests a day).
+const POLL_MS_GUEST = 30_000;
+const POLL_MS_ADMIN = 10_000;
 const POLL_MS_ON_ERROR = 30_000;
+const pollMs = () => (getAdminToken() ? POLL_MS_ADMIN : POLL_MS_GUEST);
 const CACHE_KEY = 'jaew_public_state_v2';
 
 const EMPTY_CONFIG: ServerConfig = {
@@ -164,12 +168,12 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
       window.clearTimeout(pollTimer.current);
       pollTimer.current = window.setTimeout(async () => {
         if (document.visibilityState === 'hidden') {
-          schedulePoll(POLL_MS);
+          schedulePoll(pollMs());
           return;
         }
         try {
           await fetchState();
-          schedulePoll(POLL_MS);
+          schedulePoll(pollMs());
         } catch {
           setIsOffline(true);
           schedulePoll(POLL_MS_ON_ERROR);
@@ -189,7 +193,7 @@ export const AppDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (manual) showToast((err as Error).message, 'error');
       } finally {
         setIsLoading(false);
-        schedulePoll(POLL_MS);
+        schedulePoll(pollMs());
       }
     },
     [fetchState, schedulePoll, showToast]

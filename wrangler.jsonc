@@ -1,0 +1,34 @@
+// Cloudflare Workers settings (free plan). See README.md "ขึ้นเว็บจริง".
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jaew-guesthouse",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-15",
+  // node:crypto / node:buffer (same hashing as the Railway version, so old photo names and the old PIN still match)
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    // Built website (npm run build). Files found here are served by Cloudflare without running the Worker.
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    // These always go to the Worker: the page itself (filled in by seo.ts), the API and uploaded photos.
+    "run_worker_first": ["/", "/index.html", "/api/*", "/uploads/*", "/robots.txt", "/sitemap.xml"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "jaew-guesthouse",
+      "database_id": "bbc348d6-a764-469e-ac37-71ca1d21d7bc",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // Bookings are also pulled from the Jaew Logbook app. Set to "" to turn it off.
+    "LOGBOOK_URL": "https://jaewlogbook.ai.studio/api/bookings"
+  },
+  // 20:00 UTC = 03:00 Thai time: daily backup + clean-up
+  "triggers": { "crons": ["0 20 * * *"] },
+  "observability": { "enabled": true }
+}

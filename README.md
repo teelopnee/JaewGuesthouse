@@ -3,88 +3,87 @@
 เว็บสำหรับให้ลูกค้าดูห้องพัก เช็คห้องว่าง และทัก LINE / โทรจอง พร้อม **โหมดแอดมินที่ซ่อนไว้**
 (ปุ่ม 🔒 "ผู้ดูแล" ที่ท้ายหน้าเว็บ → ใส่รหัส PIN)
 
-## เปิดใช้งานบนเครื่อง
+## เว็บจริงตอนนี้ (Cloudflare แพ็กเกจฟรี)
 
-ต้องมี [Node.js](https://nodejs.org) เวอร์ชัน 20.19 ขึ้นไป
+- ลิงก์ลูกค้า: https://jaew-guesthouse.teelopnee.workers.dev
+- QR และโปสเตอร์ A5 สำหรับพิมพ์: โฟลเดอร์ `qr-code/` (`jaew-qr-poster-A5.pdf`)
+- ใช้ Cloudflare **Workers** (ตัวเว็บ + API) และ **D1** (ฐานข้อมูล) บนบัญชี teelopnee@gmail.com
+- ข้อมูลทั้งหมดอยู่ในฐานข้อมูล D1 ชื่อ `jaew-guesthouse` ได้แก่ การตั้งค่าห้อง ราคา รูปที่อัปโหลด สมุดจด
+  การจอง และสำรองรายวัน การอัปเดตโค้ดหรือ deploy ใหม่ **ไม่ทำให้ข้อมูลหาย**
+- รหัสลับ (`TOKEN_SECRET`, `PIN_PEPPER`) เก็บเป็น **secret ของ Cloudflare** ไม่ได้อยู่ในโค้ด
+- ขีดจำกัดแพ็กเกจฟรี: 100,000 ครั้ง/วัน (รีเซ็ตทุก 7 โมงเช้า) ฐานข้อมูล 500 MB
+  หน้าลูกค้าเช็คห้องว่างทุก 30 วินาที หน้าแอดมินทุก 10 วินาที
+
+### อัปเดตเว็บหลังแก้โค้ด
+
+ต้องมี [Node.js](https://nodejs.org) เวอร์ชัน 20.19 ขึ้นไป เปิด PowerShell ในโฟลเดอร์นี้แล้วรัน
+
+```bash
+npm install
+npm test
+npm run deploy
+```
+
+ครั้งแรกบนเครื่องใหม่ต้องล็อกอิน Cloudflare ก่อนด้วย `npx wrangler login`
+
+- ดู log สด: `npx wrangler tail`
+- ตั้งค่า Cloudflare อยู่ในไฟล์ `wrangler.jsonc`
+- ตั้ง/เปลี่ยน secret: `npx wrangler secret put TOKEN_SECRET` (เปลี่ยนแล้วแอดมินทุกเครื่องต้องล็อกอินใหม่)
+  **ห้ามเปลี่ยน `PIN_PEPPER`** ถ้าเปลี่ยน รหัส PIN เดิมจะใช้ไม่ได้
+
+## เปิดใช้งานบนเครื่อง (ทดลอง)
 
 ```bash
 npm install
 npm run dev
 ```
 
-แล้วเปิด http://localhost:3000
+แล้วเปิด http://127.0.0.1:8787 (ใช้ฐานข้อมูลจำลองในเครื่อง ไม่แตะข้อมูลจริง)
+ต้องมีไฟล์ `.dev.vars` ที่มี `TOKEN_SECRET`, `PIN_PEPPER` (ข้อความสุ่มยาว 64 ตัว) ไฟล์นี้ไม่ขึ้น GitHub
 
-## ขึ้นเว็บจริง (Production)
+## ระบบกันข้อมูลหาย
 
-```bash
-npm install
-npm run build
-npm start
-```
-
-**สำคัญ:** ข้อมูลทั้งหมด (การตั้งค่าห้อง ราคา รูปที่อัปโหลด สมุดจดการจอง) ถูกเก็บในโฟลเดอร์ `data/`
-ถ้าขึ้นเว็บบนบริการที่ลบไฟล์ทุกครั้งที่ deploy ใหม่ (เช่น Cloud Run / AI Studio) ต้องตั้ง `DATA_DIR`
-ให้ชี้ไปที่ดิสก์ถาวร (persistent volume) ไม่อย่างนั้นข้อมูลจะหายเมื่ออัปเดตเว็บ
-
-ตั้งค่าเพิ่มเติมได้ผ่าน environment variables ดู `.env.example`
-
-### เว็บจริงตอนนี้ (Railway)
-
-- ลิงก์ลูกค้า: https://jaew-guesthouse-production.up.railway.app
-- โปรเจกต์ Railway: `jaew-guesthouse` (Singapore) • ข้อมูลอยู่ใน Volume ที่ `/data`
-- **อัปเดตเว็บหลังแก้โค้ด:** เปิด PowerShell ในโฟลเดอร์นี้แล้วรัน `railway up` (ข้อมูลใน Volume ไม่หาย)
-- ดู log: `railway logs` • สถานะ: `railway service status`
-- การตั้งค่า Railway อยู่ในไฟล์ `.railway/railway.ts` (ระบบใหม่ของ Railway ย้ายจาก `railway.json` แล้ว)
-  - **ห้ามลบ Volume ออกจากไฟล์นี้** ข้อมูลทั้งหมดอยู่ในนั้น และห้ามตั้ง replicas มากกว่า 1
-  - ก่อนแก้ ให้รัน `railway config plan` ดูก่อนเสมอ แล้วค่อย `railway config apply`
-  - บน Windows ต้องรันบรรทัดนี้ก่อนทุกครั้ง (บั๊กของ Railway):
-    `$env:_ = 'C:\Users\hp\AppData\Roaming\npm\node_modules\@railway\cli\bin\railway.exe'`
-  - Restart Policy = Always ตั้งไว้ที่ Railway โดยตรง (ไฟล์ IaC ยังบันทึกค่านี้ไม่ได้)
-
-### วิธีที่แนะนำ: Railway (ง่ายสุด ประมาณ $5/เดือน)
-
-1. อัปโหลดโฟลเดอร์นี้ขึ้น GitHub (repo แบบ private)
-2. ที่ railway.com → New Project → Deploy from GitHub → เลือก repo นี้ (Railway ใช้ `Dockerfile` ให้อัตโนมัติ)
-3. ที่ service → **Volumes** → Add Volume → Mount path: `/data` (ขั้นนี้สำคัญที่สุด ข้อมูลจะไม่หาย)
-4. **Settings → Networking** → Generate Domain จะได้ลิงก์ `https://....up.railway.app` ให้ลูกค้าเข้า
-   (ผูกโดเมนของตัวเองได้ที่หน้าเดียวกัน)
-5. ตั้ง Healthcheck Path: `/api/health` และ Restart Policy: Always
-
-ใช้ได้กับ Render (Web Service + Persistent Disk ที่ `/data`), Fly.io (volume ที่ `/data`)
-หรือ VPS ที่ติดตั้ง Docker ก็ได้เช่นกัน: `docker build -t jaew . && docker run -d --restart=always -p 80:3000 -v jaew-data:/data jaew`
-
-### ระบบกันข้อมูลหาย
-
-- ทุกการบันทึกเขียนลงดิสก์ทันที แบบ atomic (เขียนไฟล์ชั่วคราวแล้วค่อยสลับ) พร้อมไฟล์ `.bak` ของเวอร์ชันก่อนหน้า
-- ถ้าไฟล์เสีย ระบบจะใช้ `.bak` แทน และเก็บไฟล์ที่เสียไว้ (`*.damaged-...`) ไม่ลบทิ้ง
-- **สำรองอัตโนมัติทุกวัน** ที่ `data/backups/วันที่/` เก็บย้อนหลัง 30 วัน
+- ทุกการบันทึกเขียนลงฐานข้อมูลทันที ถ้าบันทึกพร้อมกันจากหลายเครื่อง ระบบจะรวมให้ ไม่ทับกัน
+- **สำรองอัตโนมัติทุกคืน** ตี 3 (เวลาไทย) เก็บย้อนหลัง 30 วัน
+- D1 ย้อนเวลาข้อมูลกลับไปได้ 7 วัน (Time Travel): `npx wrangler d1 time-travel info jaew-guesthouse`
 - กด "ดาวน์โหลดไฟล์สำรอง" ในหน้า ตั้งค่าที่พัก เพื่อเก็บสำเนาไว้ในเครื่องตัวเองอีกชั้น
+- สำรองทั้งฐานข้อมูล (รวมรูป) ลงเครื่อง: `npx wrangler d1 export jaew-guesthouse --remote --output=jaew-backup.sql`
 
 ## โหมดแอดมิน
 
-- รหัสเริ่มต้น `1234` — **กรุณาเปลี่ยนทันที** (แถบแอดมินจะเตือนจนกว่าจะเปลี่ยน)
+- รหัส PIN เดิมจากเว็บ Railway ใช้ต่อได้ (ถ้าเริ่มฐานข้อมูลใหม่ รหัสเริ่มต้นคือ `1234` — **กรุณาเปลี่ยนทันที**)
 - ใส่รหัสผิด 8 ครั้งใน 10 นาที ระบบจะล็อก 10 นาที
 - เข้าแอดมินแล้วจำไว้ 30 วันบนเครื่องนั้น เปลี่ยน PIN เมื่อไหร่ เครื่องอื่นจะถูกออกจากระบบทั้งหมด
 
 ฟีเจอร์แอดมิน: เปิด/ปิดปล่อยเช่าห้อง • แก้ไขข้อมูลห้อง/ราคา/ป้าย/สิ่งอำนวยความสะดวก • เปลี่ยนราคาหลายห้องพร้อมกัน •
 โหมดราคา (ราคาทุกวัน / เฉพาะวันธรรมดา) • จัดการรูปห้อง (อัปโหลด/ลิงก์/เรียงลำดับ) • สมุดจดการจอง (ตาราง + ปฏิทิน,
-คัดลอกข้อความส่ง LINE, เตือนจองซ้อน) • ตั้งค่าข้อมูลที่พัก & ติดต่อ • โหมดครีเอทีฟแก้ข้อความบนหน้าเว็บ • สำรองข้อมูล
+คัดลอกข้อความส่ง LINE, เตือนจองซ้อน) • ตั้งค่าข้อมูลที่พัก & ติดต่อ • ราคามอเตอร์ไซค์พร้อมสวิตช์เปิด/ปิด •
+โหมดครีเอทีฟแก้ข้อความบนหน้าเว็บ • สำรองข้อมูล
 
-## ย้ายข้อมูลจากแอปเดิม (AI Studio)
+การจองจากแอป Jaew Logbook ถูกดึงมาแสดงด้วยทุก 15 วินาที (ปิดได้โดยตั้ง `LOGBOOK_URL` เป็น `""` ใน `wrangler.jsonc`)
 
-- **การตั้งค่าที่เคยบันทึกใน Firestore** (ห้องที่ปิด, ราคา, ข้อมูลติดต่อ): หยุดเซิร์ฟเวอร์ก่อน แล้วรัน
-  ```bash
-  npm run import:firestore
-  ```
-- **ไฟล์จากเซิร์ฟเวอร์เดิม** `custom_admin_config.json`, `custom_room_images.json`, `custom_bookings.json`:
-  วางไว้ข้าง `package.json` ก่อนเปิดเซิร์ฟเวอร์ครั้งแรก ระบบจะนำเข้าให้อัตโนมัติ (รหัส PIN เดิมใช้ต่อได้)
+## ย้ายข้อมูลจาก Railway (ทำไปแล้ววันที่ 3 พ.ย. 2026)
+
+ข้อมูลจาก volume บน Railway ถูกดาวน์โหลดไว้ที่โฟลเดอร์ `../railway-backup-2026-11-03` แล้วย้ายเข้า D1 ด้วย
+
+```bash
+npm run import:railway -- --url https://jaew-guesthouse.teelopnee.workers.dev --dir ../railway-backup-2026-11-03
+npm run compare -- https://jaew-guesthouse-production.up.railway.app https://jaew-guesthouse.teelopnee.workers.dev
+```
+
+(คำสั่งแรกต้องตั้ง `IMPORT_TOKEN` ให้ตรงกับ secret บน Cloudflare และใช้ได้เฉพาะช่วงที่ secret นี้ยังอยู่
+ย้ายเสร็จแล้วให้ลบด้วย `npx wrangler secret delete IMPORT_TOKEN`)
+โค้ดเวอร์ชัน Railway (Express + Docker) ยังอยู่ใน GitHub ที่ commit แรก
 
 ## โครงสร้าง
 
 ```
-server/       เซิร์ฟเวอร์ (Express) — เก็บข้อมูล, ตรวจ PIN, API
+worker/       เซิร์ฟเวอร์บน Cloudflare (Hono) — เก็บข้อมูลใน D1, ตรวจ PIN, API
+migrations/   โครงสร้างฐานข้อมูล D1
 src/          หน้าเว็บ (React + Tailwind)
   data/       ข้อมูลห้องพักตั้งต้น 47 ห้อง และข้อมูลติดต่อตั้งต้น
 public/images รูปห้องที่มากับระบบ
-data/         ข้อมูลที่แอดมินบันทึก (สร้างอัตโนมัติ, ไม่ต้องอัปโหลดขึ้น git)
+tests/        ทดสอบอัตโนมัติ (npm test)
+scripts/      ย้ายข้อมูล, เทียบเว็บเก่า/ใหม่, ทำ QR (node scripts/make-qr.mjs <ลิงก์>)
+qr-code/      QR + โปสเตอร์ A5
 ```

@@ -8,12 +8,11 @@
  * Also serves robots.txt and sitemap.xml for search engines.
  */
 
-import type { Request } from 'express';
 import { GUESTHOUSE_CONFIG } from '../src/data/config';
 import { ROOMS_DATA } from '../src/data/roomsData';
 import { parsePriceNumber } from '../src/utils/pricingUtils';
 import { getRentals } from '../src/utils/rentalUtils';
-import { getSettings } from './store';
+import type { Settings } from './store';
 
 const SHARE_IMAGE = '/images/room_33_interior_1791728201467.jpg';
 const GEO = { latitude: 13.2998882, longitude: 100.9008211 };
@@ -22,15 +21,14 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-/** https://host of this request (Railway's proxy says https via X-Forwarded-Proto). */
-export function siteBase(req: Request): string {
-  const host = (req.get('host') || 'localhost').replace(/[^a-zA-Z0-9.:-]/g, '');
-  return `${req.protocol}://${host}`;
+/** https://host of this request. */
+export function siteBase(request: Request): string {
+  return new URL(request.url).origin;
 }
 
-function activeGuesthouse(): typeof GUESTHOUSE_CONFIG {
+function activeGuesthouse(settings: Settings): typeof GUESTHOUSE_CONFIG {
   const merged = { ...GUESTHOUSE_CONFIG };
-  for (const [k, v] of Object.entries(getSettings().guesthouseConfig || {})) {
+  for (const [k, v] of Object.entries(settings.guesthouseConfig || {})) {
     if (k in merged && typeof v === 'string' && v.trim() !== '') {
       (merged as Record<string, string>)[k] = v.trim();
     }
@@ -38,8 +36,8 @@ function activeGuesthouse(): typeof GUESTHOUSE_CONFIG {
   return merged;
 }
 
-function weekdayPrices(): number[] {
-  const overrides = getSettings().roomOverrides || {};
+function weekdayPrices(settings: Settings): number[] {
+  const overrides = settings.roomOverrides || {};
   return ROOMS_DATA.filter((r) => !(overrides[r.id] as any)?.isHiddenFromRental)
     .map((r) => {
       const o = overrides[r.id] as { prices?: { weekday?: string }; priceStart?: number } | undefined;
@@ -54,10 +52,9 @@ function internationalPhone(phone: string): string {
   return digits.startsWith('0') ? `+66${digits.slice(1)}` : `+${digits}`;
 }
 
-function seoTags(req: Request): string {
-  const base = siteBase(req);
-  const gh = activeGuesthouse();
-  const prices = weekdayPrices();
+function seoTags(base: string, settings: Settings): string {
+  const gh = activeGuesthouse(settings);
+  const prices = weekdayPrices(settings);
   const priceRange = prices.length
     ? `฿${Math.min(...prices).toLocaleString('en-US')} - ฿${Math.max(...prices).toLocaleString('en-US')}`
     : undefined;
@@ -106,8 +103,8 @@ function seoTags(req: Request): string {
 }
 
 /** Plain HTML + inline styles: shows before React and Tailwind's CSS are needed. */
-function appShell(): string {
-  const gh = activeGuesthouse();
+function appShell(settings: Settings): string {
+  const gh = activeGuesthouse(settings);
   const phoneText = escapeHtml((gh.phonePrimaryDisplay || gh.phonePrimary).replace(/\s*\(.*\)\s*$/, ''));
   const btn =
     'display:flex;align-items:center;justify-content:center;gap:8px;padding:14px 16px;border-radius:16px;font-weight:800;font-size:15px;text-decoration:none;';
@@ -129,21 +126,21 @@ function appShell(): string {
     `;
 }
 
-export function renderIndexHtml(template: string, req: Request): string {
+export function renderIndexHtml(template: string, base: string, settings: Settings): string {
   return template
-    .replace(/<!--\s*seo:[^>]*-->/, seoTags(req))
-    .replace(/<!--\s*app-shell:[^>]*-->/, appShell());
+    .replace(/<!--\s*seo:[^>]*-->/, seoTags(base, settings))
+    .replace(/<!--\s*app-shell:[^>]*-->/, appShell(settings));
 }
 
-export function robotsTxt(req: Request): string {
-  return ['User-agent: *', 'Allow: /', 'Disallow: /api/', '', `Sitemap: ${siteBase(req)}/sitemap.xml`, ''].join('\n');
+export function robotsTxt(base: string): string {
+  return ['User-agent: *', 'Allow: /', 'Disallow: /api/', '', `Sitemap: ${base}/sitemap.xml`, ''].join('\n');
 }
 
-export function sitemapXml(req: Request): string {
-  const lastmod = (getSettings().updatedAt || new Date().toISOString()).slice(0, 10);
+export function sitemapXml(base: string, settings: Settings): string {
+  const lastmod = (Date.parse(settings.updatedAt) > 0 ? settings.updatedAt : new Date().toISOString()).slice(0, 10);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>${escapeHtml(siteBase(req))}/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <url><loc>${escapeHtml(base)}/</loc><lastmod>${lastmod}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>
 </urlset>
 `;
 }
